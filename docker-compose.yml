@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  # Next.js Application
+  app:
+    build: .
+    container_name: park-m-trees-app
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://postgres:Postgres2025@db:5432/park_m_trees
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=Postgres2025
+      - DB_NAME=park_m_trees
+      - DB_SSL=false
+      - NODE_ENV=production
+    depends_on:
+      - db
+    networks:
+      - park-m-network
+
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: park-m-trees-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=park_m_trees
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=Postgres2025
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    networks:
+      - park-m-network
+    # Expose only to internal network
+    expose:
+      - "5432"
+
+  # Nginx Reverse Proxy with SSL
+  nginx:
+    image: nginx:alpine
+    container_name: park-m-trees-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - ./letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - app
+    networks:
+      - park-m-network
+
+  # Certbot for SSL certificate management
+  certbot:
+    image: certbot/certbot
+    container_name: park-m-trees-certbot
+    volumes:
+      - ./letsencrypt:/etc/letsencrypt
+      - ./certbot-www:/var/www/certbot
+    # This container runs only when needed for certificate renewal
+    profiles:
+      - tools
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  park-m-network:
+    driver: bridge
